@@ -1,0 +1,267 @@
+---
+title: "IPL Cricket Shiny Dashboard "
+runtime: shiny
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+    theme: cerulean #theme
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(dplyr)
+library(ggplot2)
+library(highcharter)
+library(viridisLite)
+library(forecast)
+library(treemap)
+library(maps)
+library(ggmap)
+library(googleVis)
+library(DT)
+library(plotly)
+
+
+IPL_MatchesData=read.csv("D:/datavis/ipl/matches.csv",header = TRUE)
+IPL_MatchesData<-IPL_MatchesData%>%mutate(Year= format(as.Date(IPL_MatchesData$date,'%m-%d-%Y'),'%Y'))
+IPL_DelivData=read.csv("D:/datavis/ipl/deliveries.csv",header = TRUE)
+IPL_DelivData<-IPL_DelivData%>%mutate(Year= format(as.Date(IPL_DelivData$date,'%d-%m-%y'),'%Y'))
+```
+
+Summary{data-icon="glyphicon-list"}
+==================================
+
+ROW 
+-----------------------------------------------------------------------
+
+### Total Number of Matches
+```{r}
+Min_temp_on<-count(IPL_MatchesData)
+valueBox(Min_temp_on, icon="fa fa-flag-checkered",color="#1E90FF")
+```
+
+### Average Score Rate
+```{r}
+Max_temp_on<-round(mean(IPL_DelivData$total_runs),2)
+valueBox(Max_temp_on, icon="fa-align-center",color="#ffbf00")
+
+```
+
+### Total Runs
+```{r}
+Mean_temp_on<-sum(IPL_DelivData$total_runs)
+
+valueBox(Mean_temp_on, icon="fa fa-bookmark",color="#9ACD32")
+```
+
+
+Row
+----------------------------------
+
+### Matches Data
+
+```{r}
+#datatable(IPL_MatchesData, filter="top", selection="multiple", escape=FALSE, 
+      #options = list(sDom  = '<"top">lrt<"bottom">ip'))
+datatable(head(IPL_MatchesData, 20), options = list(
+  columnDefs = list(list(className = 'dt-center', targets = 5)),
+  pageLength = 5,
+  lengthMenu = c(5, 10, 15, 20)
+))
+```
+
+Row 
+----------------------------------
+
+### Deliveries Data
+
+```{r}
+datatable(head(IPL_DelivData, 20), options = list(
+  columnDefs = list(list(className = 'dt-center', targets = 5)),
+  pageLength = 5,
+  lengthMenu = c(5, 10, 15, 20)
+))
+```
+
+Univariate & Bivariate Plots{data-icon="fa fa-bar-chart"}
+==================================
+
+Sidebar {.sidebar}
+----------------------------------
+
+```{r}
+uiOutput("dropdown_years") #Used to display UIdropdown all columns after uploading
+uiOutput("dropdown_numcolumns") #Used to display UIdropdown all columns after uploading
+```
+
+Row
+----------------------------------
+
+### Bar chart for top 10 players for selected year total runs {.text}
+
+```{r}
+plotOutput("freq_yearwise_plot") #Used to plot ggplot based on dplyr table data
+```
+
+Row
+----------------------------------
+
+### Boxplot for Multiple Numerical columns
+
+```{r}
+plotOutput("boxplot")
+```
+
+
+multivariate Plots{data-icon="fa fa-line-chart"}
+==================================
+
+Row
+----------------------------------
+
+### Linechart for Average runs per ball by over each season and innings
+
+```{r}
+plotOutput("runs_ipl")
+```
+
+Row
+----------------------------------
+
+### Stacked Bar for Total runs scored from 1s to 6s
+
+```{r}
+plotOutput("runs_ipl1sto6s")
+```
+
+### Scatter Plot for Strike rate for Batsman
+
+```{r}
+plotOutput("strratbatsman")
+```
+
+Maps{data-icon="glyphicon-map-marker"}
+==================================
+Row
+----------------------------------
+
+### Total Number of Matches played in city wise
+
+```{r}
+#Rendering the Total number of matches city wise in GooglevisMap
+uiOutput("dynamic")
+
+#render the ui:
+output$dynamic <- renderUI({ 
+   htmlOutput("myTable")
+})
+
+#here is your server activity:
+output$myTable <- renderGvis({
+IPL_Matchescitylatlong=IPL_MatchesData[!is.na(IPL_MatchesData$city),]%>%group_by(city)%>%summarise(TotalMatches=n())%>%arrange(-TotalMatches)
+                        gvisGeoChart(IPL_Matchescitylatlong,"city", colorvar="TotalMatches",
+                         
+                 options=list(region="IN",displayMode="markers", 
+                                       resolution="provinces",
+                              width=1024, height=400,colorAxis="{colors:['orange', 'green']}",
+                   backgroundColor="lightblue"))
+                      
+})
+
+```
+
+Motion Chart on IPL Data{data-icon="fa fa-recycle"}
+==================================
+
+Row {data-height=550}
+----------------------------------
+
+### Motion Chart for Total Number of Wins per Team Year Wise. 
+Note: Please open this link in IE Browser to view Motion chart.
+
+```{r}
+data<-IPL_MatchesData%>%group_by(season,winner)%>%summarise(Total=n())%>%arrange(season)
+data<-na.omit(data)
+data<-data[-c(62,25),]
+data<-as.data.frame(data)
+
+uiOutput("Motionchartdynamic")
+
+#render the ui:
+output$Motionchartdynamic <- renderUI({ 
+   htmlOutput("Motionchart")
+})
+output$Motionchart<-renderGvis(gvisMotionChart(data, idvar="winner", timevar="season",sizevar ="Total",colorvar = "Total"))
+```
+
+```{r}
+observe({
+  teams <- IPL_DelivData %>% select(batting_team)%>%
+  distinct()
+teams <- rename(teams, team = batting_team)
+s_team <- c("KKR","RCB","CSK","KXIP","RR","DD","MI","DC","KTK","PWI","SRH","RPS","GL")
+teams <- cbind(teams, s_team)
+ nums <- sapply(IPL_MatchesData, is.numeric)    
+ numsdelv <- sapply(IPL_DelivData, is.numeric) 
+  #rendering the numeric column dropdown at sidebar 
+  output$dropdown_numcolumns=renderUI(selectInput(inputId = "select_numcolumn",label = "Select a columns for Boxplot",choices=names(IPL_MatchesData)[nums],multiple = TRUE,selected =names(IPL_MatchesData)[nums][2] ))
+  #created a variable for boxplot for selected columns
+  output$boxplot=renderPlot(boxplot(IPL_MatchesData[,input$select_numcolumn]))
+  #rendering the categorical column dropdown at sidebar
+  #output$dropdown_catgcolumns=renderUI(selectInput(inputId = "select_catgcolumn",label = "Select a Categorical columns",choices=names(IPL_MatchesData)[!nums],selected =names(IPL_MatchesData)[nums][1]))
+   #rendering the categorical column dropdown at sidebar
+   output$dropdown_years=renderUI(selectInput(inputId = "select_Year",label = "Select a Year for Barchart",choices=sort(unique(IPL_DelivData$Year))))
+   #Using dplyr and ggplot form a table and plot the bar chart
+  output$freq_yearwise_plot=renderPlot(
+  ggplot(IPL_DelivData%>%filter(Year==input$select_Year)%>%group_by(batsman)%>%summarise(Total_Runs=sum(total_runs,na.rm=TRUE))%>%arrange(-Total_Runs)%>%head(10),aes(x=batsman,y=Total_Runs))+geom_bar(stat = 'identity',fill = "#0080ff")+geom_text(aes(label=Total_Runs), position=position_dodge(width=0.9), vjust=-0.25))
+  
+  #Average runs per ball by over each season and innings
+  runs_o <- IPL_DelivData%>%
+  left_join(IPL_MatchesData, by=c("match_id"="id"))%>%
+  group_by(season,inning,over)%>%
+  summarize(no=n(),runs =sum(total_runs))%>%
+  mutate(avg=runs/no)%>%
+  filter(inning!=3,inning!=4)
+  output$runs_ipl<-renderPlot(ggplot(runs_o,aes(x=season,y=avg,colour=over,group=over))+
+  geom_line(show.legend = TRUE, size =1.25,linetype=1)+
+  theme(legend.position="right")+
+  theme(legend.direction = "vertical") +
+  facet_wrap(~inning)+
+  scale_y_continuous(name="average runs per ball")+
+  scale_x_discrete(name="season",limits=c(2008,2009,2010,2011,2012,2013,2014,2015,2016)))
+  
+  #"Total runs scored in 1s to 6s"
+  runs_cat <- IPL_DelivData %>%
+  left_join(IPL_MatchesData,by=c("match_id"="id"))%>%
+   left_join(teams,by=c("batting_team"="team"))%>%
+  group_by(s_team,batsman_runs)%>%
+  summarize(no=n(),runs=sum(total_runs))
+
+runs_cat$batsman_runs <- as.factor(runs_cat$batsman_runs)
+ 
+output$runs_ipl1sto6s<-renderPlot(ggplot(runs_cat,aes(x=s_team,y=runs,label=runs,fill=batsman_runs)) +
+  geom_bar(stat = "identity"))
+#strike rate for batsman 
+Bat_sr<- IPL_DelivData %>%
+  left_join(IPL_MatchesData,by=c("match_id"="id"))%>%
+   left_join(teams,by=c("batting_team"="team"))%>%
+  group_by(batsman)%>%
+  summarize(balls=n(),runs=sum(batsman_runs))%>%
+  mutate(sr=runs*100/balls)%>%
+  arrange(desc(sr))%>%
+  mutate(score_group=ifelse(sr<100,"100",ifelse(sr<150,"100-150","150+")))%>%
+  mutate(player_lab=ifelse(batsman=="AD Russell","AD Russell",ifelse(batsman=="V Sehwag","V Sehwag",ifelse(batsman=="V Kohli","V Kohli",ifelse(batsman=="CH Gayle","CH Gayle","")))))
+ 
+output$strratbatsman<-renderPlot(ggplot(Bat_sr,aes(x=sr,y=runs,colour=score_group,size=runs))+
+  geom_jitter(show.legend = TRUE,alpha=.75)+
+      theme(legend.position="right")+
+    theme(legend.direction = "vertical") +
+    geom_text(aes(label=player_lab,hjust=-.25, colour="red"))+
+  scale_y_continuous(name="Runs")+
+    scale_x_continuous(name="strike rate"))
+
+})
+
+```
+
