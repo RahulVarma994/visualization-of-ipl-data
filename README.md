@@ -1,2 +1,2 @@
 # visualization-of-ipl-data
-using ipl data i have done interative dashboard.
+using ipl data and i have done eda and also created interative dashboard.
